@@ -1,4 +1,5 @@
 import random
+import statsd
 from time import time
 
 from bigchaindb import exceptions as core_exceptions
@@ -71,6 +72,8 @@ class Bigchain(object):
         self.connection = connection if connection else backend.connect(**bigchaindb.config['database'])
         if not self.me or not self.me_private:
             raise exceptions.KeypairNotFoundException()
+
+        self.statsd = statsd.StatsClient(bigchaindb.config['graphite']['host'])
 
     federation = property(lambda self: set(self.nodes_except_me + [self.me]))
     """ Set of federation member public keys """

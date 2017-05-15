@@ -106,8 +106,12 @@ class Vote:
 
         try:
             tx.validate(self.bigchain)
+            self.bigchain.statsd.incr('tx.valid', 1)
+            self.bigchain.statsd.incr('vote.tx.valid', 1)
             valid = True
         except exceptions.ValidationError as e:
+            self.bigchain.statsd.incr('tx.invalid', 1)
+            self.bigchain.statsd.incr('vote.tx.invalid', 1)
             logger.warning('Invalid tx: %s', e)
             valid = False
 

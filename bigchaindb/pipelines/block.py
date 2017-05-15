@@ -74,10 +74,14 @@ class BlockPipeline:
         # If transaction is not valid it should not be included
         try:
             tx.validate(self.bigchain)
+            self.bigchain.statsd.incr('tx.valid', 1)
+            self.bigchain.statsd.incr('block.tx.valid', 1)
             return tx
         except ValidationError as e:
             logger.warning('Invalid tx: %s', e)
             self.bigchain.delete_transaction(tx.id)
+            self.bigchain.statsd.incr('tx.invalid', 1)
+            self.bigchain.statsd.incr('block.tx.invalid', 1)
             return None
 
     def create(self, tx, timeout=False):

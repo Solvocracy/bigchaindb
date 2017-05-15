@@ -78,6 +78,7 @@ install_requires = [
     'jsonschema~=2.5.1',
     'pyyaml~=3.12',
     'aiohttp~=2.0',
+    'statsd==3.2.1',
 ]
 
 setup(

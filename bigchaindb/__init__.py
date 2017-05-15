@@ -90,6 +90,9 @@ config = {
         'fmt_logfile': log_config['formatters']['file']['format'],
         'granular_levels': {},
     },
+    'graphite': {
+        'host': os.environ.get('BIGCHAINDB_GRAPHITE_HOST', 'graphite'),
+    },
 }
 
 # We need to maintain a backup copy of the original config dict in case
