@@ -24,8 +24,8 @@ import time
 import queue
 import logging
 import requests
-import threading
 import subprocess
+import multiprocessing
 
 
 def main():
@@ -43,7 +43,6 @@ def main():
 
 
 def load():
-
     from bigchaindb.core import Bigchain
     from bigchaindb.common.crypto import generate_key_pair
     from bigchaindb.common.transaction import Transaction
@@ -51,12 +50,10 @@ def load():
     def transactions():
         priv, pub = generate_key_pair()
         tx = Transaction.create([pub], [([pub], 1)])
-        for i in range(1<<32):
+        while True:
+            i = yield tx.to_dict()
             tx.asset = {'data': {'n': i}}
             tx.sign([priv])
-            if i % 1000 == 0:
-                print(i)
-            yield tx.to_dict()
 
     def wait_for_up():
         logging.info('Waiting for server to start...')
@@ -68,31 +65,36 @@ def load():
                 time.sleep(0.1)
 
     def post_txs():
+        txs = transactions()
+        txs.send(None)
         while True:
-            tx = tx_queue.get()
-            if tx == None:
+            i = tx_queue.get()
+            if i is None:
                 break
+            if not i % 1000:
+                print(i)
+            tx = txs.send(i)
             req = requests.post('http://localhost:9984/api/v1/transactions/', json=tx)
             assert req.status_code == 202
 
     num_threads = 5
     test_time = 100
-    tx_queue = queue.Queue(maxsize=num_threads*2)
-    txs = transactions()
+    tx_queue = multiprocessing.Queue(maxsize=num_threads*2)
+    txsi = iter(range(2<<32))
     start_time = time.time()
     b = Bigchain()
     
     wait_for_up()
 
     for i in range(num_threads):
-        threading.Thread(target=post_txs).start()
+        multiprocessing.Process(target=post_txs).start()
 
     while True:
         t = time.time()
         if t - start_time > test_time:
             break
         for i in range(500):
-            tx_queue.put(txs.__next__())
+            tx_queue.put(txsi.__next__())
         while b.connection.db.backlog.count() > 10000:
             time.sleep(0.1)
 
