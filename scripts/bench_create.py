@@ -53,8 +53,9 @@ def load():
         tx = Transaction.create([pub], [([pub], 1)])
         for i in range(1<<32):
             tx.asset = {'data': {'n': i}}
-            print(i)
             tx.sign([priv])
+            if i % 1000 == 0:
+                print(i)
             yield tx.to_dict()
 
     def wait_for_up():
@@ -90,17 +91,18 @@ def load():
         t = time.time()
         if t - start_time > test_time:
             break
-        print("loop")
         for i in range(500):
             tx_queue.put(txs.__next__())
         while b.connection.db.backlog.count() > 10000:
             time.sleep(0.1)
 
-    while b.connection.db.backlog.count() > 0:
-        time.sleep(0.5)
-
-    print('sent %s transactions' % i)
-
+    while True:
+        backlog = b.connection.db.backlog.count()
+        if backlog > 0:
+            print("%s txs in backlog" % backlog)
+            time.sleep(1)
+        else:
+            break
 
     # http://localhost:32822/render?target=stats_counts.vote.tx.valid&from=-150s
 
