@@ -162,6 +162,13 @@ def initial():
     return rs
 
 
+class Nnode(Node):
+    def safe_run_forever(self):
+        import os
+        logger.info("%s-%s" % (os.getpid(), self.target))
+        super().safe_run_forever()
+
+
 def create_pipeline():
     """Create and return the pipeline of operations to be distributed
     on different processes."""
@@ -169,11 +176,11 @@ def create_pipeline():
     voter = Vote()
 
     vote_pipeline = Pipeline([
-        Node(voter.validate_block),
-        Node(voter.ungroup),
-        Node(voter.validate_tx, fraction_of_cores=1),
-        Node(voter.vote),
-        Node(voter.write_vote)
+        Nnode(voter.validate_block),
+        Nnode(voter.ungroup),
+        Nnode(voter.validate_tx, fraction_of_cores=1),
+        Nnode(voter.vote),
+        Nnode(voter.write_vote)
     ])
 
     return vote_pipeline
