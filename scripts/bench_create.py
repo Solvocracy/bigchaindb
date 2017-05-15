@@ -96,6 +96,9 @@ def load():
         while b.connection.db.backlog.count() > 10000:
             time.sleep(0.1)
 
+    for i in range(num_threads):
+        tx_queue.put(None)
+
     while True:
         backlog = b.connection.db.backlog.count()
         if backlog > 0:
@@ -103,6 +106,8 @@ def load():
             time.sleep(1)
         else:
             break
+    
+    print('All done')
 
     # http://localhost:32822/render?target=stats_counts.vote.tx.valid&from=-150s
 
