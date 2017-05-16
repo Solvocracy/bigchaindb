@@ -80,8 +80,9 @@ class Transaction(Transaction):
         return self
 
     @classmethod
-    def from_dict(cls, tx_body):
-        validate_transaction_schema(tx_body)
+    def from_dict(cls, tx_body, validate_schema=True):
+        if validate_schema:
+            validate_transaction_schema(tx_body)
         return super().from_dict(tx_body)
 
 
@@ -240,7 +241,7 @@ class Block(object):
             return False
 
     @classmethod
-    def from_dict(cls, block_body):
+    def from_dict(cls, block_body, validate_tx_schema=True):
         """Transform a Python dictionary to a Block object.
 
         Args:
@@ -261,8 +262,8 @@ class Block(object):
         if block_id != block_body['id']:
             raise InvalidHash()
 
-        transactions = [Transaction.from_dict(tx) for tx
-                        in block['transactions']]
+        transactions = [Transaction.from_dict(tx, validate_tx_schema)
+                        for tx in block['transactions']]
 
         signature = block_body.get('signature')
 

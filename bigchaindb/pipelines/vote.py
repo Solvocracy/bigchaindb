@@ -44,13 +44,14 @@ class Vote:
         self.counters = Counter()
         self.validity = {}
 
-        self.invalid_dummy_tx = Transaction.create([self.bigchain.me],
-                                                   [([self.bigchain.me], 1)])
+        dummy_tx = Transaction.create([self.bigchain.me],
+                                      [([self.bigchain.me], 1)]).to_dict()
+        self.invalid_dummy_tx = dummy_tx
 
-    def validate_block(self, block):
+    def validate_block(self, block_dict):
         if not self.bigchain.has_previous_vote(block['id']):
             try:
-                block = Block.from_dict(block)
+                block = Block.from_dict(block_dict, validate_tx_schema=False)
             except (exceptions.InvalidHash):
                 # XXX: if a block is invalid we should skip the `validate_tx`
                 # step, but since we are in a pipeline we cannot just jump to
@@ -67,7 +68,7 @@ class Vote:
                 # transaction and propagate it to the next steps of the
                 # pipeline.
                 return block.id, [self.invalid_dummy_tx]
-            return block.id, block.transactions
+            return block.id, block_dict['transactions']
 
     def ungroup(self, block_id, transactions):
         """Given a block, ungroup the transactions in it.
@@ -87,7 +88,7 @@ class Vote:
         for tx in transactions:
             yield tx, block_id, num_tx
 
-    def validate_tx(self, tx, block_id, num_tx):
+    def validate_tx(self, tx_dict, block_id, num_tx):
         """Validate a transaction. Transaction must also not be in any VALID
            block.
 
@@ -100,20 +101,21 @@ class Vote:
             Three values are returned, the validity of the transaction,
             ``block_id``, ``num_tx``.
         """
-        new = self.bigchain.is_new_transaction(tx.id, exclude_block_id=block_id)
-        if not new:
-            return False, block_id, num_tx
 
         try:
+            tx = Transaction.from_dict(tx_dict)
+            new = self.bigchain.is_new_transaction(tx.id, exclude_block_id=block_id)
+            if not new:
+                raise exceptions.ValidationError('Tx already exists, %s', tx.id)
             tx.validate(self.bigchain)
+            valid = True
             self.bigchain.statsd.incr('tx.valid', 1)
             self.bigchain.statsd.incr('vote.tx.valid', 1)
-            valid = True
         except exceptions.ValidationError as e:
+            valid = False
+            logger.warning('Invalid tx: %s', e)
             self.bigchain.statsd.incr('tx.invalid', 1)
             self.bigchain.statsd.incr('vote.tx.invalid', 1)
-            logger.warning('Invalid tx: %s', e)
-            valid = False
 
         return valid, block_id, num_tx
 
