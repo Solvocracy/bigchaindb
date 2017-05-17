@@ -67,22 +67,23 @@ def load():
     def post_txs():
         txs = transactions()
         txs.send(None)
-        while True:
-            i = tx_queue.get()
-            if i is None:
-                break
-            if not i % 1000:
-                print(i)
-            tx = txs.send(i)
-            req = requests.post('http://localhost:9984/api/v1/transactions/', json=tx)
-            assert req.status_code == 202
+        with requests.Session() as session:
+            while True:
+                i = tx_queue.get()
+                if i is None:
+                    break
+                tx = txs.send(i)
+                res = session.post('http://localhost:9984/api/v1/transactions/', json=tx)
+                assert res.status_code == 202
+                res.content
 
-    num_threads = 5
+    num_threads = 20
     test_time = 100
     tx_queue = multiprocessing.Queue(maxsize=num_threads*2)
     txsi = iter(range(2<<32))
     start_time = time.time()
     b = Bigchain()
+    timer = print_per_sec()
     
     wait_for_up()
 
@@ -95,6 +96,7 @@ def load():
             break
         for i in range(500):
             tx_queue.put(txsi.__next__())
+            timer.__next__()
         while b.connection.db.backlog.count() > 10000:
             time.sleep(0.1)
 
@@ -113,6 +115,17 @@ def load():
 
     # http://localhost:32822/render?target=stats_counts.vote.tx.valid&from=-150s
 
+
+def print_per_sec():
+    while True:
+        t = time.time()
+        for i in range(1<<32):
+            yield
+            if time.time() - t > 1:
+                print('%s tx/s' % i)
+                break
+            
+        
 
 
 def cmd(command, capture=False):
