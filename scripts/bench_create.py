@@ -33,10 +33,22 @@ def main():
     cmd(service + 'up -d bdb')
 
     out = cmd(service + 'port graphite 80', capture=True)
-    graphite_web_port = out.strip().split(':')[1]
-    print('Graphite web interface at: http://localhost:%s/' % graphite_web_port)
+    graphite_url = 'http://localhost:%s/' % out.strip().split(':')[1]
+    print('Graphite web interface at: %s' % graphite_url)
 
-    cmd(service + 'exec bdb python %s load' % sys.argv[0])
+    proc = cmd(service + 'exec bdb python %s load' % sys.argv[0], wait=False)
+    path = 'render?target=stats.pipelines.vote.throughput&from=-100s&format=csv'
+    curl = 'curl "%s%s"' % (graphite_url, path)
+    print(curl)
+    
+    while True:
+        cmd(curl)
+        if proc.poll():
+            break
+        else:
+            time.sleep(1)
+
+    assert 0 == proc.wait()
 
 
 def load():
@@ -75,14 +87,14 @@ def load():
         except KeyboardInterrupt:
             pass
 
+    wait_for_up()
     num_clients = 30
     test_time = 60
     tx_queue = multiprocessing.Queue(maxsize=num_clients)
     txn = 0
-    start_time = time.time()
     b = Bigchain()
     
-    wait_for_up()
+    start_time = time.time()
 
     for i in range(num_clients):
         multiprocessing.Process(target=post_txs).start()
@@ -94,27 +106,26 @@ def load():
         while True:
             count = b.connection.db.backlog.count()
             if count > 10000:
-                time.sleep(0.1)
+                time.sleep(0.2)
             else:
                 break
-        processed = txn - count
-        print('%.1f tx/s' % (processed / (time.time() - start_time)))
 
     for i in range(num_clients):
         tx_queue.put(None)
 
     print('Finished')
-    print('%.1f tx/s' % (processed / (time.time() - start_time)))
 
     # http://localhost:32822/render?target=stats_counts.vote.tx.valid&from=-150s
 
 
-def cmd(command, capture=False):
+def cmd(command, capture=False, wait=True):
     stdout = subprocess.PIPE if capture else None
     args = ['bash', '-c', command]
     proc = subprocess.Popen(args, stdout=stdout)
-    assert not proc.wait()
-    return capture and proc.stdout.read().decode()
+    if wait:
+        assert not proc.wait()
+        return capture and proc.stdout.read().decode()
+    return proc
 
 
 service = 'docker-compose -p bench_create '

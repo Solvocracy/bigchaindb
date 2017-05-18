@@ -49,7 +49,7 @@ class Vote:
         self.invalid_dummy_tx = dummy_tx
 
     def validate_block(self, block_dict):
-        if not self.bigchain.has_previous_vote(block['id']):
+        if not self.bigchain.has_previous_vote(block_dict['id']):
             try:
                 block = Block.from_dict(block_dict, validate_tx_schema=False)
             except (exceptions.InvalidHash):
@@ -68,7 +68,7 @@ class Vote:
                 # transaction and propagate it to the next steps of the
                 # pipeline.
                 return block.id, [self.invalid_dummy_tx]
-            return block.id, block_dict['transactions']
+            return block.id, block_dict['block']['transactions']
 
     def ungroup(self, block_id, transactions):
         """Given a block, ungroup the transactions in it.
@@ -109,13 +109,9 @@ class Vote:
                 raise exceptions.ValidationError('Tx already exists, %s', tx.id)
             tx.validate(self.bigchain)
             valid = True
-            self.bigchain.statsd.incr('tx.valid', 1)
-            self.bigchain.statsd.incr('vote.tx.valid', 1)
         except exceptions.ValidationError as e:
             valid = False
             logger.warning('Invalid tx: %s', e)
-            self.bigchain.statsd.incr('tx.invalid', 1)
-            self.bigchain.statsd.incr('vote.tx.invalid', 1)
 
         return valid, block_id, num_tx
 
@@ -142,6 +138,7 @@ class Vote:
             self.last_voted_id = block_id
             del self.counters[block_id]
             del self.validity[block_id]
+            self.bigchain.statsd.incr('pipelines.vote.throughput', num_tx)
             return vote
 
     def write_vote(self, vote):
