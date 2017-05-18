@@ -12,7 +12,7 @@ from multipipes import Pipeline, Node, Pipe
 import bigchaindb
 from bigchaindb import backend
 from bigchaindb.backend.changefeed import ChangeFeed
-from bigchaindb.models import Transaction
+from bigchaindb.models import FastTransaction
 from bigchaindb.common.exceptions import ValidationError
 from bigchaindb import Bigchain
 
@@ -61,7 +61,7 @@ class BlockPipeline:
             ``None`` otherwise.
         """
         try:
-            tx = Transaction.from_dict(tx)
+            tx = FastTransaction(tx)
         except ValidationError:
             return None
 
@@ -71,18 +71,7 @@ class BlockPipeline:
             self.bigchain.delete_transaction(tx.id)
             return None
 
-        # If transaction is not valid it should not be included
-        try:
-            tx.validate(self.bigchain)
-            self.bigchain.statsd.incr('tx.valid', 1)
-            self.bigchain.statsd.incr('block.tx.valid', 1)
-            return tx
-        except ValidationError as e:
-            logger.warning('Invalid tx: %s', e)
-            self.bigchain.delete_transaction(tx.id)
-            self.bigchain.statsd.incr('tx.invalid', 1)
-            self.bigchain.statsd.incr('block.tx.invalid', 1)
-            return None
+        return tx
 
     def create(self, tx, timeout=False):
         """Create a block.

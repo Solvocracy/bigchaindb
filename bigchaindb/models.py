@@ -303,3 +303,15 @@ class Block(object):
 
     def to_str(self):
         return serialize(self.to_dict())
+
+
+class FastTransaction:
+    def __init__(self, tx_dict):
+        self.tx = tx_dict
+
+    @property
+    def id(self):
+        return self.tx['id']
+
+    def to_dict(self):
+        return self.tx
