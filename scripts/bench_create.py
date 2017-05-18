@@ -22,22 +22,19 @@ import os
 import sys
 import time
 import queue
-import logging
 import requests
 import subprocess
 import multiprocessing
 
 
 def main():
-    logging.basicConfig(level=logging.DEBUG)
-
     cmd(service + 'up -d mdb')
     cmd(service + 'up -d graphite')
     cmd(service + 'up -d bdb')
 
     out = cmd(service + 'port graphite 80', capture=True)
     graphite_web_port = out.strip().split(':')[1]
-    logging.info('Graphite web interface at: http://localhost:%s/' % graphite_web_port)
+    print('Graphite web interface at: http://localhost:%s/' % graphite_web_port)
 
     cmd(service + 'exec bdb python %s load' % sys.argv[0])
 
@@ -56,7 +53,6 @@ def load():
             tx.sign([priv])
 
     def wait_for_up():
-        logging.info('Waiting for server to start...')
         while True:
             try:
                 requests.get('http://localhost:9984/')
@@ -67,65 +63,50 @@ def load():
     def post_txs():
         txs = transactions()
         txs.send(None)
-        with requests.Session() as session:
-            while True:
-                i = tx_queue.get()
-                if i is None:
-                    break
-                tx = txs.send(i)
-                res = session.post('http://localhost:9984/api/v1/transactions/', json=tx)
-                assert res.status_code == 202
-                res.content
+        try:
+            with requests.Session() as session:
+                while True:
+                    i = tx_queue.get()
+                    if i is None:
+                        break
+                    tx = txs.send(i)
+                    res = session.post('http://localhost:9984/api/v1/transactions/', json=tx)
+                    assert res.status_code == 202
+        except KeyboardInterrupt:
+            pass
 
-    num_threads = 20
-    test_time = 100
-    tx_queue = multiprocessing.Queue(maxsize=num_threads*2)
-    txsi = iter(range(2<<32))
+    num_clients = 30
+    test_time = 60
+    tx_queue = multiprocessing.Queue(maxsize=num_clients)
+    txn = 0
     start_time = time.time()
     b = Bigchain()
-    timer = print_per_sec()
     
     wait_for_up()
 
-    for i in range(num_threads):
+    for i in range(num_clients):
         multiprocessing.Process(target=post_txs).start()
 
-    while True:
-        t = time.time()
-        if t - start_time > test_time:
-            break
+    while time.time() - start_time < test_time:
         for i in range(500):
-            tx_queue.put(txsi.__next__())
-            timer.__next__()
-        while b.connection.db.backlog.count() > 10000:
-            time.sleep(0.1)
+            tx_queue.put(txn)
+            txn += 1
+        while True:
+            count = b.connection.db.backlog.count()
+            if count > 10000:
+                time.sleep(0.1)
+            else:
+                break
+        processed = txn - count
+        print('%.1f tx/s' % (processed / (time.time() - start_time)))
 
-    for i in range(num_threads):
+    for i in range(num_clients):
         tx_queue.put(None)
 
-    while True:
-        backlog = b.connection.db.backlog.count()
-        if backlog > 0:
-            print("%s txs in backlog" % backlog)
-            time.sleep(1)
-        else:
-            break
-    
-    print('All done')
+    print('Finished')
+    print('%.1f tx/s' % (processed / (time.time() - start_time)))
 
     # http://localhost:32822/render?target=stats_counts.vote.tx.valid&from=-150s
-
-
-def print_per_sec():
-    while True:
-        t = time.time()
-        for i in range(1<<32):
-            yield
-            if time.time() - t > 1:
-                print('%s tx/s' % i)
-                break
-            
-        
 
 
 def cmd(command, capture=False):
